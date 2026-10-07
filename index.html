@@ -511,7 +511,7 @@ function renderNeeds(){
     ? needs.map(n => `<span class="chip">${esc(n.data.name)}${canWrite ? `<button type="button" data-need="${esc(n.id)}" aria-label="Remove ${esc(n.data.name)}">×</button>` : ""}</span>`).join("")
     : `<span class="muted small">Nobody's waiting on a ride right now.</span>`;
 }
-/* Two backends share one interface: Claude's db (on the Claude page) or a Google Sheet web app (on GitHub). */
+/* Backends share one interface: Claude's db (on the Claude page), Firebase Firestore (the live site), or the old Google Sheet web app (fallback). */
 const RIDES_API = "https://script.google.com/macros/s/AKfycbxnLgizoaWQQM3sA-iIRTc-p9wQ3MfyKo-DzWVqWWqIdTF-5nBj60jKrPE5-K6u4iPQ/exec";   // paste the Google Apps Script web app URL here for the GitHub version
 let api = null;
 function claudeApi(db){
@@ -539,6 +539,92 @@ function claudeApi(db){
         () => { statusEl.textContent = "The ride board stopped updating. Reload the page."; });
       db.collection("needs").orderBy("created").onSnapshot(s => { needs = s.docs.map(d => ({ id: d.id, data: d.data() })); renderNeeds(); }, () => {});
       db.collection("bagels").orderBy("created").onSnapshot(s => { bagels = s.docs.map(d => ({ id: d.id, data: d.data() })); renderBagels(); }, () => {});
+    }
+  };
+}
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCzhqAev2taHHrja9-ieAcpVQ-_JLuos3k",
+  authDomain: "larch-march.firebaseapp.com",
+  projectId: "larch-march",
+  storageBucket: "larch-march.firebasestorage.app",
+  messagingSenderId: "1049899995479",
+  appId: "1:1049899995479:web:81c64343325c419cf46e12"
+};   // public web config: it only identifies the project; the Firestore security rules decide who can write what
+function firebaseApi(cfg){
+  const V = "10.14.1";
+  let F = null, fdb = null;
+  const ready = (async () => {
+    const [{ initializeApp }, fs] = await Promise.all([
+      import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`),
+      import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`)
+    ]);
+    F = fs; const app = initializeApp(cfg);
+    try { fdb = F.initializeFirestore(app, { localCache: F.persistentLocalCache({ tabManager: F.persistentMultipleTabManager() }) }); }
+    catch(e){ fdb = F.getFirestore(app); }
+  })();
+  const key = n => "p_" + String(n || "").toLowerCase().replace(/\s+/g, " ").trim().replace(/\//g, "_");
+  const ref = (col, id) => F.doc(fdb, col, id);
+  const col = name => F.collection(fdb, name);
+  return {
+    async addCar(d){
+      await ready;
+      const cref = F.doc(col("cars")), rref = ref("riders", key(d.driver));
+      await F.runTransaction(fdb, async tx => {
+        if ((await tx.get(rref)).exists()) throw { code: "dup" };
+        tx.set(cref, { ...d, riders: [], created: Date.now() });
+        tx.set(rref, { car: cref.id, name: d.driver, driver: true });
+      });
+    },
+    async join(id, name){
+      await ready;
+      const cref = ref("cars", id), rref = ref("riders", key(name));
+      await F.runTransaction(fdb, async tx => {
+        const [c, r] = await Promise.all([tx.get(cref), tx.get(rref)]);
+        if (!c.exists()) throw { code: "gone" };
+        if (r.exists()) throw { code: "dup" };
+        const riders = c.data().riders || [];
+        if (riders.length >= Number(c.data().seats)) throw { code: "full" };
+        tx.update(cref, { riders: [...riders, name] });
+        tx.set(rref, { car: id, name });
+      });
+      const m = needs.find(n => String(n.data.name || "").toLowerCase().startsWith(name.toLowerCase()));
+      if (m) { try { await F.deleteDoc(ref("needs", m.id)); } catch(e){} }
+    },
+    async unride(id, i){
+      await ready;
+      const cref = ref("cars", id);
+      await F.runTransaction(fdb, async tx => {
+        const c = await tx.get(cref); if (!c.exists()) return;
+        const riders = c.data().riders || [], gone = riders[i]; if (gone === undefined) return;
+        tx.update(cref, { riders: riders.filter((_, j) => j !== i) });
+        tx.delete(ref("riders", key(gone)));
+      });
+    },
+    async setLeave(id, leave){ await ready; await F.updateDoc(ref("cars", id), { leave }); },
+    async removeCar(id){
+      await ready;
+      const cref = ref("cars", id);
+      await F.runTransaction(fdb, async tx => {
+        const c = await tx.get(cref); if (!c.exists()) return;
+        const d = c.data();
+        (d.riders || []).forEach(r => tx.delete(ref("riders", key(r))));
+        tx.delete(ref("riders", key(d.driver)));
+        tx.delete(cref);
+      });
+    },
+    async addNeed(name){ await ready; await F.addDoc(col("needs"), { name, created: Date.now() }); },
+    async removeNeed(id){ await ready; await F.deleteDoc(ref("needs", id)); },
+    async addBagel(o){ await ready; const r = await F.addDoc(col("bagels"), { name: o.name, bagel: o.bagel, schmear: o.schmear, qty: o.qty, created: Date.now() }); return r.id; },
+    async removeBagel(id){ await ready; await F.deleteDoc(ref("bagels", id)); },
+    start(){
+      ready.then(() => {
+        const q = name => F.query(col(name), F.orderBy("created"));
+        F.onSnapshot(q("cars"), s => { cars = s.docs.map(d => ({ id: d.id, data: d.data() })); renderCars(); },
+          () => { statusEl.textContent = "The ride board stopped updating. Reload the page."; });
+        F.onSnapshot(q("needs"), s => { needs = s.docs.map(d => ({ id: d.id, data: d.data() })); renderNeeds(); }, () => {});
+        F.onSnapshot(q("bagels"), s => { bagels = s.docs.map(d => ({ id: d.id, data: d.data() })); renderBagels(); }, () => {});
+        statusEl.textContent = "Updates show up for everyone right away.";
+      }).catch(() => { statusEl.textContent = "Couldn't load the ride board. Check your connection and reload."; });
     }
   };
 }
@@ -587,6 +673,8 @@ async function act(fn, done, undo){
     if (undo) undo();
     const code = e && e.code;
     if (code === "full") statusEl.textContent = "That car just filled up. Try another.";
+    else if (code === "dup") statusEl.textContent = "That name is already on the ride board. Tap the × next to it first if you want to switch cars.";
+    else if (code === "gone") statusEl.textContent = "That car was just removed.";
     else if (code === "invalid_argument" || code === "not_granted") setReadOnly("You can see the ride board but can't edit it. Text me and I'll find you a seat.");
     else if (code === "limit") statusEl.textContent = "The ride board is full. Text me.";
     else statusEl.textContent = "That didn't save. Check your connection and try again.";
@@ -656,6 +744,8 @@ renderCars(); renderNeeds();
     if (w === false) setReadOnly("You can see the ride board but can't edit it. Text me and I'll find you a seat.");
     else statusEl.textContent = "Updates show up for everyone right away.";
     api = claudeApi(db); api.start();
+  } else if (FIREBASE_CONFIG){
+    api = firebaseApi(FIREBASE_CONFIG); api.start();
   } else if (RIDES_API){
     api = sheetApi(RIDES_API); api.start();
   } else {
