@@ -235,14 +235,6 @@ footer a.small{color:var(--muted)}
         <div class="fact"><span class="k">The hike</span><span class="v">Saturday's hike is <b>totally optional</b>! Come for the cozy night and head home whenever you want, no pressure.</span></div>
       </div>
     </section>
-    <section>
-      <div class="sec-head"><p class="eyebrow">Getting there</p><h2>The <em>drive</em></h2></div>
-      <ul class="list">
-        <li>It's about 2½–3 hours from Seattle: I-5 north to Burlington, then Highway 20 east. Road trip snacks encouraged!</li>
-        <li><b>Fill up on gas</b> before Marblemount! There's nothing past it.</li>
-        <li>Cell service gets spotty out there, so download offline maps before you go!</li>
-      </ul>
-    </section>
   </div>
 
   <!-- RIDES -->
@@ -285,16 +277,15 @@ footer a.small{color:var(--muted)}
       <ul class="list">
         <li>Roll up after work, claim a bed and get cozy. The hot tub will be waiting!</li>
         <li>We're folding dumplings together for dinner! No skills required, the messy ones taste just as good.</li>
-        <li>Cake, then birthday Jeopardy in teams! A few questions are about me, so study up.</li>
+        <li>Cake, then birthday Jeopardy in teams!</li>
       </ul>
     </section>
     <section>
       <div class="sec-head"><p class="eyebrow">Saturday</p><h2>Larch March!</h2></div>
       <ul class="list">
-        <li>Mt Bagel bagels and overnight oats for breakfast, then we tidy up and roll out before 10!</li>
+        <li>Mt Bagel bagels for breakfast, then we tidy up and roll out before 10!</li>
         <li>Hikers drive about an hour east to Cutthroat Pass. Everyone else is free to head straight home!</li>
         <li>Hikers will be back in Seattle Saturday evening, probably after dark. Totally worth it!</li>
-        <li>If snow closes Highway 20, I'll text everyone a plan B!</li>
       </ul>
     </section>
     <section>
@@ -315,12 +306,11 @@ footer a.small{color:var(--muted)}
     <section>
       <div class="sec-head"><p class="eyebrow">Food &amp; drinks</p><h2>On the menu!</h2></div>
       <div class="facts">
-        <div class="fact"><span class="k">Friday</span><span class="v">Homemade dumplings and cucumber salad, with a vegetarian filling too.</span></div>
-        <div class="fact"><span class="k">Saturday</span><span class="v">Mt Bagel bagels and cream cheese (order yours below!) plus overnight oats with berries.</span></div>
+        <div class="fact"><span class="k">Friday</span><span class="v">Homemade dumplings with a chicken filling and a vegetarian filling, plus cucumber salad.</span></div>
+        <div class="fact"><span class="k">Saturday</span><span class="v">Mt Bagel bagels and cream cheese (order yours below!)</span></div>
         <div class="fact"><span class="k">Drinks</span><span class="v">I'm bringing beer and everything for martinis! Bring anything else you'd like.</span></div>
         <div class="fact"><span class="k">You bring</span><span class="v">Snacks and lunch for the trail, if you're hiking.</span></div>
       </div>
-      <p class="muted">Vegetarians, I've got you! If the menu doesn't sound good, feel free to bring your own meal. For any other dietary needs, just text me.</p>
     </section>
     <section id="bagels">
       <div class="sec-head"><p class="eyebrow">Food · Saturday breakfast</p><h2>Place your bagel order!</h2></div>
@@ -332,7 +322,6 @@ footer a.small{color:var(--muted)}
         <label class="field" for="bSchmear">Cream cheese<select id="bSchmear">
           <option>Plain</option><option>Scallion</option><option>Spicy scallion</option><option>No cream cheese</option></select></label>
         <label class="field" for="bQty">How many<select id="bQty"><option>1</option><option>2</option></select></label>
-        <label class="field" for="bNote">Notes (optional)<input type="text" id="bNote" maxlength="60" placeholder="e.g. cream cheese on the side"></label>
         <button class="btn" type="submit">Add my order</button>
       </form>
       <p class="muted small" id="bagelStatus"></p>
@@ -433,7 +422,8 @@ $("#copyAddr").addEventListener("click", async e => {
 const PACK = {
   packCabin: [
     ["Pajamas + toiletries"], ["A change of clothes"], ["Phone charger"], ["Bathing suit for the hot tub"],
-    ["Slippers or cozy socks", 1], ["Earplugs (it's a full house!)", 1], ["Your favorite drinks", 1], ["Board games or a deck of cards", 1]
+    ["Slippers or cozy socks", 1], ["Earplugs (it's a full house!)", 1], ["Your favorite drinks", 1], ["Board games or a deck of cards", 1],
+    ["Fill up on gas before Marblemount (there's nothing past it!)"], ["Download offline maps (cell service gets spotty out there)"]
   ],
   packHike: [
     ["Hiking boots, or sturdy sneakers with good grip (trail runners are great)"], ["Wool socks, plus a dry pair for the drive home"],
@@ -646,11 +636,11 @@ function renderBagels(){
   if (bagels.length && mine.some(id => !known.has(id))) store.set("lm-bagels", mine.filter(id => known.has(id)));
   wrap.hidden = !own.length;
   list.innerHTML = own.map(b => { const d = b.data; const q = Number(d.qty) > 1 ? ` ×${Number(d.qty)}` : "";
-    return `<span class="chip">${esc(d.name)}: ${esc(d.bagel)}${q}, ${esc(d.schmear)}${d.note ? ` (${esc(d.note)})` : ""}<button type="button" data-bagel="${esc(b.id)}" aria-label="Remove this order">×</button></span>`; }).join("");
+    return `<span class="chip">${esc(d.name)}: ${esc(d.bagel)}${q}, ${esc(d.schmear)}<button type="button" data-bagel="${esc(b.id)}" aria-label="Remove this order">×</button></span>`; }).join("");
 }
 $("#bagelForm").addEventListener("submit", e => {
   e.preventDefault();
-  const o = { name: $("#bName").value.trim(), bagel: $("#bBagel").value, schmear: $("#bSchmear").value, qty: Number($("#bQty").value) || 1, note: $("#bNote").value.trim() };
+  const o = { name: $("#bName").value.trim(), bagel: $("#bBagel").value, schmear: $("#bSchmear").value, qty: Number($("#bQty").value) || 1 };
   if (!o.name) return;
   store.set("lm-name", o.name);
   if (!api){ $("#bagelStatus").textContent = "Orders aren't connected yet. Text me your order!"; return; }
@@ -658,7 +648,7 @@ $("#bagelForm").addEventListener("submit", e => {
     try {
       const id = await api.addBagel(o);
       if (id){ store.set("lm-bagels", [...myBagelIds(), id]); }
-      $("#bNote").value = ""; $("#bagelStatus").textContent = "Got it! Your order is in."; renderBagels();
+      $("#bagelStatus").textContent = "Got it! Your order is in."; renderBagels();
     }
     catch(err){ $("#bagelStatus").textContent = err && err.code === "limit" ? "The order list is full. Text me!" : "That didn't save. Check your connection and try again."; }
   })();
