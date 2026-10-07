@@ -225,7 +225,7 @@ footer a.small{color:var(--muted)}
       </figure>
       <div class="facts">
         <div class="fact"><span class="k">Arrive</span><span class="v"><b>Friday, Oct 9</b> · any time after 2 PM!</span></div>
-        <div class="fact"><span class="k">Leave</span><span class="v"><b>Saturday, Oct 10</b> · out by 10 AM</span></div>
+        <div class="fact"><span class="k">Leave</span><span class="v"><b>Saturday, Oct 10</b> · out by 8 AM</span></div>
         <div class="fact"><span class="k">Your share</span><span class="v"><b>$100</b> for the night. Venmo me at <b id="venmoHandle">@rainetenerelli</b>. Thank you!!
           <span class="btns" style="margin-top:12px">
             <a class="btn ghost" href="https://venmo.com/u/rainetenerelli" target="_blank" rel="noopener">Open Venmo</a>
@@ -289,9 +289,9 @@ footer a.small{color:var(--muted)}
     <section>
       <div class="sec-head"><p class="eyebrow">Saturday</p><h2>Larch March!</h2></div>
       <ul class="list">
-        <li>Mt Bagel bagels for breakfast, then we tidy up and roll out before 10!</li>
+        <li>Mt Bagel bagels for breakfast, then we tidy up and roll out before 8!</li>
         <li>Hikers drive about an hour east to Cutthroat Pass. Everyone else is free to head straight home!</li>
-        <li>Hikers will be back in Seattle Saturday evening, probably after dark. Totally worth it!</li>
+        <li>Hikers will be back in Seattle Saturday evening. Totally worth it!</li>
       </ul>
     </section>
     <section>
@@ -820,10 +820,10 @@ $("#lockAgain").addEventListener("click", () => {
       if (t < "2026-10-09T12:00" || t > "2026-10-10T20:00") return;
       const day = t.slice(0, 10);
       if (day !== lastDay){ html += `<span class="wx-sep">${day === "2026-10-09" ? "Fri" : "Sat"}</span>`; lastDay = day; }
-      const hh = +t.slice(11, 13), hike = day === "2026-10-10" && hh >= 10 && hh <= 16;
+      const hh = +t.slice(11, 13), hike = day === "2026-10-10" && hh >= 9 && hh <= 15;
       const sun = Math.max(0, 100 - (H.cloud_cover[i] ?? 100)) * (H.is_day[i] ? 1 : 0);
       const pp = H.precipitation_probability[i];
-      html += `<div class="wx-h ${hike ? "hike" : ""} ${H.is_day[i] ? "" : "night"}" ${hh === 10 && day === "2026-10-10" ? 'id="wxHike"' : ""} title="${esc(label(H.weather_code[i]))}">
+      html += `<div class="wx-h ${hike ? "hike" : ""} ${H.is_day[i] ? "" : "night"}" ${hh === 9 && day === "2026-10-10" ? 'id="wxHike"' : ""} title="${esc(label(H.weather_code[i]))}">
         <span class="hr">${fmtHour(t)}</span>${iconFor(H.weather_code[i], H.cloud_cover[i], H.is_day[i])}
         <span class="tp">${Math.round(H.temperature_2m[i])}°</span>
         <span class="pp">${pp >= 10 ? pp + "%" : ""}</span>
