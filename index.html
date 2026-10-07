@@ -412,17 +412,27 @@ document.querySelector(".tabs").addEventListener("click", e => { const b = e.tar
 document.addEventListener("click", e => { const g = e.target.closest("[data-goto]"); if (g){ e.preventDefault(); showTab(g.dataset.goto, true); } });
 showTab((location.hash || "").slice(1) || "home");
 
-$("#copyVenmo").addEventListener("click", async e => {
-  try { await navigator.clipboard.writeText("@rainetenerelli"); e.target.textContent = "Copied!"; }
-  catch(err){ const r = document.createRange(); r.selectNodeContents($("#venmoHandle")); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); e.target.textContent = "Selected, copy it"; }
-  setTimeout(() => e.target.textContent = "Copy handle", 2500);
-});
-$("#copyAddr").addEventListener("click", async e => {
-  const t = $("#addrText").textContent;
-  try { await navigator.clipboard.writeText(t); e.target.textContent = "Copied!"; }
-  catch(err){ const r = document.createRange(); r.selectNodeContents($("#addrText")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); e.target.textContent = "Selected, copy it"; }
-  setTimeout(() => e.target.textContent = "Copy address", 2500);
-});
+/* copy buttons: execCommand first (works inside the tap on iOS and in in-app browsers), then the Clipboard API, then select the text as a last resort */
+async function copyText(t, srcEl){
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = t; ta.setAttribute("readonly", ""); ta.setAttribute("aria-hidden", "true");
+    ta.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;font-size:16px";
+    document.body.appendChild(ta); ta.focus(); ta.select(); ta.setSelectionRange(0, t.length);
+    const ok = document.execCommand("copy"); ta.remove();
+    if (ok) return true;
+  } catch(err){}
+  try { if (navigator.clipboard && navigator.clipboard.writeText){ await navigator.clipboard.writeText(t); return true; } } catch(err){}
+  const r = document.createRange(); r.selectNodeContents(srcEl); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+  return false;
+}
+async function copyBtn(e, text, src, label){
+  const btn = e.currentTarget;
+  btn.textContent = (await copyText(text, src)) ? "Copied!" : "Selected, copy it";
+  setTimeout(() => btn.textContent = label, 2500);
+}
+$("#copyVenmo").addEventListener("click", e => copyBtn(e, "@rainetenerelli", $("#venmoHandle"), "Copy handle"));
+$("#copyAddr").addEventListener("click", e => copyBtn(e, $("#addrText").textContent, $("#addrText"), "Copy address"));
 
 /* packing */
 const PACK = {
