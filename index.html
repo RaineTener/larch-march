@@ -448,7 +448,7 @@ for (const [box, items] of Object.entries(PACK)){
 }
 
 /* ride board */
-let db = null, canWrite = true, cars = [], needs = [], bagels = [];
+let db = null, canWrite = true, cars = [], needs = [], bagels = [], pending = 0;
 const statusEl = $("#rideStatus");
 const myName = () => store.get("lm-name", "");
 function setReadOnly(msg){
@@ -533,14 +533,17 @@ function claudeApi(db){
   };
 }
 function sheetApi(url){
-  const apply = st => {
+  const fixLeave = t => { const m = /(\d{1,2}):(\d{2})(?::\d{2})? GMT/.exec(String(t || "")); return m && !/^\d{1,2}:\d{2}$/.test(String(t)) ? m[1].padStart(2, "0") + ":" + m[2] : t; };
+  const apply = (st, fromNet = true) => {
     if (!st || !Array.isArray(st.cars)) return;
+    if (fromNet) store.set("lm-board", st);
+    st.cars.forEach(c => { c.leave = fixLeave(c.leave); });
     cars = st.cars.map(c => ({ id: c.id, data: c }));
     needs = (st.needs || []).map(n => ({ id: n.id, data: n }));
     bagels = (st.bagels || []).map(b => ({ id: b.id, data: b }));
     renderCars(); renderNeeds(); renderBagels();
   };
-  const load = async () => { const r = await fetch(url + (url.includes("?") ? "&" : "?") + "t=" + Date.now()); apply(await r.json()); };
+  const load = async () => { const r = await fetch(url + (url.includes("?") ? "&" : "?") + "t=" + Date.now()); const st = await r.json(); if (!pending) apply(st); };
   const post = async body => {
     const r = await fetch(url, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(body) });
     const st = await r.json(); apply(st);
@@ -557,6 +560,8 @@ function sheetApi(url){
     addBagel: async o => { const before = new Set(bagels.map(b => b.id)); await post({ action: "addBagel", ...o }); const fresh = bagels.filter(b => !before.has(b.id) && b.data.name === o.name); return fresh.length ? fresh[fresh.length - 1].id : null; },
     removeBagel: id => post({ action: "removeBagel", id }),
     start(){
+      const cached = store.get("lm-board", null);
+      if (cached){ apply(cached, false); statusEl.textContent = "Checking for updates…"; }
       load().then(() => { statusEl.textContent = "Updates show up for everyone within a few seconds."; })
             .catch(() => { statusEl.textContent = "Couldn't load the ride board. Check your connection and reload."; });
       setInterval(() => { if (!document.hidden) load().catch(() => {}); }, 15000);
@@ -564,16 +569,19 @@ function sheetApi(url){
     }
   };
 }
-async function act(fn, done){
+async function act(fn, done, undo){
   if (!api) return;
+  pending++;
   try { await fn(); if (done) statusEl.textContent = done; }
   catch(e){
+    if (undo) undo();
     const code = e && e.code;
     if (code === "full") statusEl.textContent = "That car just filled up. Try another.";
     else if (code === "invalid_argument" || code === "not_granted") setReadOnly("You can see the ride board but can't edit it. Text me and I'll find you a seat.");
     else if (code === "limit") statusEl.textContent = "The ride board is full. Text me.";
     else statusEl.textContent = "That didn't save. Check your connection and try again.";
   }
+  finally { pending--; }
 }
 $("#cars").addEventListener("submit", e => {
   const f = e.target.closest('form[data-act="ride"]'); if (!f) return;
@@ -583,12 +591,26 @@ $("#cars").addEventListener("submit", e => {
   const id = f.closest(".car").dataset.id;
   const c = cars.find(x => x.id === id);
   if (c && (c.data.riders || []).length >= Number(c.data.seats)){ statusEl.textContent = "That car just filled up. Try another."; return; }
-  act(() => api.join(id, name), "You're in! See you Friday.");
+  if (pending){ statusEl.textContent = "One sec, still saving…"; return; }
+  const key = n => String(n || "").toLowerCase().replace(/\s+/g, " ").trim();
+  const k = key(name);
+  const dup = cars.find(x => (x.data.riders || []).some(r => key(r) === k));
+  if (dup){ statusEl.textContent = dup.id === id ? "You're already in this car!" : `You're already in ${dup.data.driver}'s car. Tap the × next to your name there first if you want to switch.`; return; }
+  const drives = cars.find(x => key(x.data.driver) === k);
+  if (drives){ statusEl.textContent = "You're a driver, so you already have a seat in your own car!"; return; }
+  const snap = JSON.stringify(cars);
+  c.data.riders = [...(c.data.riders || []), name]; renderCars(); statusEl.textContent = "Joining…";
+  act(() => api.join(id, name), "You're in! See you Friday.", () => { cars = JSON.parse(snap); renderCars(); });
 });
 $("#cars").addEventListener("click", e => {
   const b = e.target.closest("button[data-act]"); if (!b) return;
   const id = b.closest(".car").dataset.id;
-  if (b.dataset.act === "unride") act(() => api.unride(id, Number(b.dataset.i)));
+  if (b.dataset.act === "unride"){
+    if (pending){ statusEl.textContent = "One sec, still saving…"; return; }
+    const snap = JSON.stringify(cars), c = cars.find(x => x.id === id), i = Number(b.dataset.i);
+    if (c){ c.data.riders = (c.data.riders || []).filter((_, n) => n !== i); renderCars(); }
+    act(() => api.unride(id, i), "", () => { cars = JSON.parse(snap); renderCars(); });
+  }
   else if (b.dataset.act === "delcar"){
     if (b.dataset.confirm !== "1"){ b.dataset.confirm = "1"; b.textContent = "Tap again to remove"; setTimeout(() => { b.dataset.confirm = ""; b.textContent = "Remove car"; }, 4000); return; }
     act(() => api.removeCar(id));
