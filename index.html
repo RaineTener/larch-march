@@ -93,6 +93,7 @@ h3{font-size:1.25rem}
 .tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--larch)}
 .panel{display:grid;gap:44px;padding-top:32px}
 section{display:grid;gap:16px}
+#bagels{scroll-margin-top:72px}
 .sec-head{display:grid;gap:8px}
 
 /* lists and rows */
@@ -289,7 +290,7 @@ footer a.small{color:var(--muted)}
     <section>
       <div class="sec-head"><p class="eyebrow">Saturday</p><h2>Larch March!</h2></div>
       <ul class="list">
-        <li>Mt Bagel bagels for breakfast, then we tidy up and roll out before 8!</li>
+        <li>Mt Bagel bagels for breakfast (<a href="#bagels" data-scroll="bagels">place your order here!</a>), then we tidy up and roll out before 8!</li>
         <li>Hikers drive about an hour east to Cutthroat Pass. Everyone else is free to head straight home!</li>
         <li>Hikers will be back in Seattle Saturday evening. Totally worth it!</li>
       </ul>
@@ -313,14 +314,14 @@ footer a.small{color:var(--muted)}
       <div class="sec-head"><p class="eyebrow">Food &amp; drinks</p><h2>On the menu!</h2></div>
       <div class="facts">
         <div class="fact"><span class="k">Friday</span><span class="v">Homemade dumplings with a chicken filling and a vegetarian filling, plus cucumber salad.</span></div>
-        <div class="fact"><span class="k">Saturday</span><span class="v">Mt Bagel bagels and cream cheese (order yours below!)</span></div>
+        <div class="fact"><span class="k">Saturday</span><span class="v">Mt Bagel bagels and cream cheese (<a href="#bagels" data-scroll="bagels">order yours below!</a>)</span></div>
         <div class="fact"><span class="k">Drinks</span><span class="v">I'm bringing beer and everything for martinis! Bring anything else you'd like.</span></div>
         <div class="fact"><span class="k">You bring</span><span class="v">Snacks and lunch for the trail, if you're hiking.</span></div>
       </div>
     </section>
     <section id="bagels">
       <div class="sec-head"><p class="eyebrow">Food · Saturday breakfast</p><h2>Place your bagel order!</h2></div>
-      <p>I'm preordering from Mt Bagel for Saturday breakfast, so tell me what you want! Please get your order in by Thursday. Your order comes straight to me.</p>
+      <p>I'm preordering from Mt Bagel for Saturday breakfast, so tell me what you want! Orders close <b>Friday at 9 AM</b>. Your order comes straight to me.</p>
       <form class="form" id="bagelForm" autocomplete="off">
         <label class="field" for="bName">Your name<input type="text" id="bName" maxlength="40" required></label>
         <label class="field" for="bBagel">Bagel<select id="bBagel">
@@ -409,6 +410,12 @@ function showTab(t, push){
   if (push) { try { history.replaceState(null, "", "#" + t); } catch(e){} window.scrollTo({ top: 0 }); }
 }
 document.querySelector(".tabs").addEventListener("click", e => { const b = e.target.closest("button[data-tab]"); if (b) showTab(b.dataset.tab, true); });
+document.addEventListener("click", e => {
+  const l = e.target.closest("[data-scroll]"); if (!l) return;
+  const t = document.getElementById(l.dataset.scroll); if (!t) return;
+  e.preventDefault();
+  t.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+});
 document.addEventListener("click", e => { const g = e.target.closest("[data-goto]"); if (g){ e.preventDefault(); showTab(g.dataset.goto, true); } });
 showTab((location.hash || "").slice(1) || "home");
 
@@ -755,6 +762,14 @@ renderCars(); renderNeeds();
 
 
 /* bagel preorder */
+const BAGEL_DEADLINE = Date.parse("2026-10-09T09:00:00-07:00");   // Friday 9:00 AM Pacific; firestore.rules enforces the same moment server-side
+const bagelsClosed = () => Date.now() >= BAGEL_DEADLINE;
+function applyBagelLock(){
+  const closed = bagelsClosed(), form = $("#bagelForm");
+  if (closed && form) form.hidden = true;
+  if (closed){ $("#bagelStatus").textContent = "Bagel orders are closed. Text me if you need to change yours!"; }
+  renderBagels();
+}
 function myBagelIds(){ return store.get("lm-bagels", []); }
 function renderBagels(){
   const list = $("#bagelList"), wrap = $("#myBagels");
@@ -764,10 +779,11 @@ function renderBagels(){
   if (bagels.length && mine.some(id => !known.has(id))) store.set("lm-bagels", mine.filter(id => known.has(id)));
   wrap.hidden = !own.length;
   list.innerHTML = own.map(b => { const d = b.data; const q = Number(d.qty) > 1 ? ` ×${Number(d.qty)}` : "";
-    return `<span class="chip">${esc(d.name)}: ${esc(d.bagel)}${q}, ${esc(d.schmear)}<button type="button" data-bagel="${esc(b.id)}" aria-label="Remove this order">×</button></span>`; }).join("");
+    return `<span class="chip">${esc(d.name)}: ${esc(d.bagel)}${q}, ${esc(d.schmear)}${bagelsClosed() ? "" : `<button type="button" data-bagel="${esc(b.id)}" aria-label="Remove this order">×</button>`}</span>`; }).join("");
 }
 $("#bagelForm").addEventListener("submit", e => {
   e.preventDefault();
+  if (bagelsClosed()){ applyBagelLock(); return; }
   const o = { name: $("#bName").value.trim(), bagel: $("#bBagel").value, schmear: $("#bSchmear").value, qty: Number($("#bQty").value) || 1 };
   if (!o.name) return;
   store.set("lm-name", o.name);
@@ -782,12 +798,13 @@ $("#bagelForm").addEventListener("submit", e => {
   })();
 });
 $("#bagelList").addEventListener("click", e => {
-  const b = e.target.closest("button[data-bagel]"); if (!b || !api) return;
+  const b = e.target.closest("button[data-bagel]"); if (!b || !api || bagelsClosed()) return;
   const id = b.dataset.bagel;
   act(async () => { await api.removeBagel(id); store.set("lm-bagels", myBagelIds().filter(x => x !== id)); renderBagels(); }, "Order removed.");
 });
 { const n = store.get("lm-name", ""); if (n && $("#bName")) $("#bName").value = n; }
 renderBagels();
+applyBagelLock(); setInterval(() => { if (bagelsClosed()) applyBagelLock(); }, 30000);
 
 /* ---------- game night (encrypted) ---------- */
 const GAME_PAYLOAD = {"s":"qd+P82DPlsgGmx+7+DxEEA==","i":"QbjnqRduzp90MUJD","c":"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"};
@@ -808,6 +825,12 @@ const fresh = () => ({ used:{}, teams:[{n:"Team 1",s:0},{n:"Team 2",s:0},{n:"Tea
 let J = window.claude?.hot?.data?.J || store.get("rb-game", null) || fresh();
 window.claude?.hot?.snapshot?.(() => ({ J }));
 const saveJ = () => store.set("rb-game", J);
+/* the host's code is kept for this browser tab only (sessionStorage), so closing the tab or handing over the phone locks game night again */
+const codeStore = {
+  get(){ try { return sessionStorage.getItem("rb-gamecode"); } catch(e){ return null; } },
+  set(v){ try { if (v == null) sessionStorage.removeItem("rb-gamecode"); else sessionStorage.setItem("rb-gamecode", v); } catch(e){} }
+};
+store.set("rb-gamecode", null);   // wipe any code an earlier version of this page saved on the device
 const stage = $("#stage");
 let resetArm = false;
 const curValue = () => !J.cur ? 0 : (J.cur === DAILY_DOUBLE ? (Number(J.wager) || 0) : VALUES[Number(J.cur.split("-")[1])]);
@@ -879,20 +902,20 @@ async function unlock(code, quiet){
   try {
     const d = await decryptGame(code);
     CATS = d.CATS; FINAL = d.FINAL; DAILY_DOUBLE = d.DD;
-    store.set("rb-gamecode", code);
+    codeStore.set(code);
     $("#gameLock").hidden = true; $("#game").hidden = false; msg.textContent = "";
     renderGame();
   } catch(err){
     if (!quiet) msg.textContent = err && err.message === "nocrypto" ? "This browser can't open the game. Try Chrome, Safari or Edge." : "That code didn't work. Check with the host.";
-    store.set("rb-gamecode", null);
+    codeStore.set(null);
   } finally { $("#unlockBtn").disabled = false; }
 }
 $("#codeForm").addEventListener("submit", e => { e.preventDefault(); const c = $("#gameCode").value; if (c.trim()) unlock(c); });
 $("#lockAgain").addEventListener("click", () => {
-  CATS = FINAL = null; store.set("rb-gamecode", null); stage.innerHTML = "";
+  CATS = FINAL = null; codeStore.set(null); stage.innerHTML = "";
   $("#game").hidden = true; $("#gameLock").hidden = false; $("#gameCode").value = "";
 });
-{ const saved = store.get("rb-gamecode", null); if (saved) unlock(saved, true); }
+{ const saved = codeStore.get(); if (saved) unlock(saved, true); }
 
 
 
